@@ -390,20 +390,54 @@ function uid(){return Date.now().toString(36)+Math.random().toString(36).substr(
 // ── DATABASE SEED ──
 async function seedIfEmpty(){
   const s = await usersRef.once('value');
-  if(s.exists()) return;
-  const aid = uid();
-  await usersRef.child(aid).set({id:aid,name:'المسؤول الرئيسي',username:'admin',password:'admin123',role:'admin'});
+  if(s.exists() && (await menuRef.once('value')).exists()) return; // التأكد من عدم وجود المنيو والمستخدمين
+  
+  if(!s.exists()) {
+    const aid = uid();
+    await usersRef.child(aid).set({id:aid,name:'المسؤول الرئيسي',username:'admin',password:'admin123',role:'admin'});
+  }
+
+  // القائمة الجديدة المستخرجة من الفواتير والمنيو
   const menu=[
-    {name:'طعمية',emoji:'🧆',price:5,desc:'طعمية مصرية أصيلة'},
-    {name:'جبنة بيضاء',emoji:'🧀',price:8,desc:'جبنة طازجة'},
-    {name:'بيض مقلي',emoji:'🍳',price:10,desc:'بيض مقلي طازج'},
-    {name:'بيض مسلوق',emoji:'🥚',price:8,desc:'بيض مسلوق'},
-    {name:'فول بالزيت',emoji:'🫘',price:7,desc:'فول مدمس بالزيت والليمون'},
-    {name:'فول بالطماطم',emoji:'🍅',price:8,desc:'فول مع صوص طماطم'},
-    {name:'جبنة رومي',emoji:'🧀',price:10,desc:'جبنة رومي قديمة'},
-    {name:'عيش بلدي',emoji:'🫓',price:3,desc:'عيش بلدي طازج'},
-    {name:'طماطم وخيار',emoji:'🥗',price:5,desc:'سلطة طازجة'},
-    {name:'مربى',emoji:'🫙',price:5,desc:'مربى فراولة أو برتقال'},
+    // === الفول ===
+    {name:'فول بلدي',emoji:'🫘',price:12,desc:'ساندوتش فول سادة (عيش بلدي)'},
+    {name:'فول إسكندراني بلدي',emoji:'🌶️',price:15,desc:'فول بالخلطة الإسكندراني (عيش بلدي)'},
+    {name:'فول إسكندراني شامي',emoji:'🌶️',price:15,desc:'فول بالخلطة الإسكندراني (عيش شامي)'},
+    {name:'فول بالبيض',emoji:'🍳',price:17,desc:'فول مع بيض مقلي أو مسلوق'},
+
+    // === الطعمية (الفلافل) ===
+    {name:'طعمية بلدي',emoji:'🧆',price:12,desc:'طعمية سادة (عيش بلدي)'},
+    {name:'طعمية شامي',emoji:'🧆',price:12,desc:'طعمية سادة (عيش شامي)'},
+    {name:'طعمية محشية بلدي',emoji:'🧆',price:15,desc:'طعمية محشية بالخلطة (عيش بلدي)'},
+    {name:'طعمية بالبيض',emoji:'🍳',price:17,desc:'طعمية مع بيض'},
+    {name:'طعمية على بتنجان',emoji:'🍆',price:15,desc:'مكس طعمية مع باذنجان'},
+
+    // === البطاطس ===
+    {name:'بطاطس بلدي',emoji:'🍟',price:17,desc:'بطاطس صوابع مقلية (عيش بلدي)'},
+    {name:'بطاطس طحينة بس بلدي',emoji:'🍟',price:17,desc:'بطاطس مع طحينة فقط (عيش بلدي)'},
+    {name:'بطاطس كاتشب مايونيز بلدي',emoji:'🍟',price:23,desc:'بطاطس صوابع كاتشب ومايونيز (بلدي)'},
+    {name:'بطاطس كاتشب مايونيز شامي',emoji:'🍟',price:23,desc:'بطاطس صوابع كاتشب ومايونيز (شامي)'},
+    {name:'بطاطس جبنة رومي شامي',emoji:'🧀',price:25,desc:'بطاطس مع جبنة رومي (عيش شامي)'},
+    {name:'مهروسة بلدي',emoji:'🥔',price:15,desc:'بطاطس مهروسة (عيش بلدي)'},
+    {name:'مهروسة شامي',emoji:'🥔',price:15,desc:'بطاطس مهروسة (عيش شامي)'},
+    {name:'شبسي شامي',emoji:'🥔',price:17,desc:'بطاطس شيبسي (عيش شامي)'},
+    {name:'شبسي بلدي طحينة فقط',emoji:'🥔',price:17,desc:'شيبسي مع طحينة فقط (بلدي)'},
+    {name:'شبسي كاتشب مايونيز شامي',emoji:'🥔',price:23,desc:'شيبسي كاتشب ومايونيز (شامي)'},
+
+    // === البيض والمنوعات ===
+    {name:'أومليت بسطرمة بلدي',emoji:'🍳',price:23,desc:'بيض أومليت بالبسطرمة (عيش بلدي)'},
+    {name:'أومليت بسطرمة شامي',emoji:'🍳',price:23,desc:'بيض أومليت بالبسطرمة (عيش شامي)'},
+    {name:'جبنة مقلية شامي',emoji:'🧀',price:25,desc:'جبنة مقلية (عيش شامي)'},
+    {name:'جبنة طماطم',emoji:'🍅',price:15,desc:'جبنة بيضاء بالطماطم'},
+    {name:'جبنة بالبيض',emoji:'🍳',price:20,desc:'جبنة بيضاء مع البيض'},
+    {name:'بابا غنوج',emoji:'🍆',price:15,desc:'سلطة بابا غنوج'},
+    {name:'مسقعة',emoji:'🍆',price:15,desc:'مسقعة مصرية بالباذنجان'},
+    {name:'شكشوكة',emoji:'🍳',price:15,desc:'بيض بالطماطم والبصل (شكشوكة)'},
+    {name:'بتنجان مقلي',emoji:'🍆',price:15,desc:'باذنجان مقلي بالدقة'},
+    {name:'عجة فرنساوي',emoji:'🍳',price:15,desc:'عجة بيض على الطريقة الفرنسية'},
+
+    // === إضافات ===
+    {name:'إضافة كاتشب مايونيز',emoji:'🥫',price:6,desc:'إضافة صوص كاتشب ومايونيز'}
   ];
   for(const m of menu){const id=uid(); await menuRef.child(id).set({...m,id});}
 }
