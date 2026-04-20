@@ -28,7 +28,7 @@
   .page{display:none;min-height:calc(100vh - 60px);}
   .page.active{display:block;}
 
-  #pageLoading{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:1rem;min-height:100vh;}
+  #pageLoading{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:1rem;min-height:100vh;background:var(--cream);position:fixed;top:0;left:0;right:0;bottom:0;z-index:1000;}
   .spinner{width:44px;height:44px;border:4px solid var(--border);border-top-color:var(--orange);border-radius:50%;animation:spin .8s linear infinite;}
   @keyframes spin{to{transform:rotate(360deg);}}
 
@@ -156,6 +156,11 @@
 </head>
 <body>
 
+<div id="pageLoading">
+  <div class="spinner"></div>
+  <p style="color:var(--text-light);font-size:14px;margin-top:10px;">جاري الاتصال بقاعدة البيانات...</p>
+</div>
+
 <nav class="nav">
   <div class="nav-logo"><span>🥪</span> طلبات الإفطار</div>
   <div class="nav-user" id="navUser" style="display:none;">
@@ -166,13 +171,6 @@
 
 <div class="toast" id="toast"></div>
 
-<!-- LOADING -->
-<div id="pageLoading" class="page active">
-  <div class="spinner"></div>
-  <p style="color:var(--text-light);font-size:14px;">جاري الاتصال بقاعدة البيانات...</p>
-</div>
-
-<!-- LOGIN -->
 <div class="page" id="pageLogin">
   <div class="auth-wrapper">
     <div class="auth-card">
@@ -188,7 +186,6 @@
   </div>
 </div>
 
-<!-- REGISTER -->
 <div class="page" id="pageRegister">
   <div class="auth-wrapper">
     <div class="auth-card">
@@ -205,7 +202,6 @@
   </div>
 </div>
 
-<!-- USER DASHBOARD -->
 <div class="page" id="pageUser">
   <div class="dashboard">
     <div class="welcome-banner">
@@ -242,7 +238,6 @@
   </div>
 </div>
 
-<!-- ADMIN -->
 <div class="page" id="pageAdmin">
   <div class="admin-layout">
     <div class="admin-sidebar">
@@ -351,11 +346,10 @@
   </div>
 </div>
 
-<!-- Firebase -->
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 <script>
-// ── FIREBASE ──
+// ── FIREBASE CONFIG ──
 firebase.initializeApp({
   apiKey:"AIzaSyCSdwCxvbVUSAsEhGkDIzmqgg-3dm3XqVA",
   authDomain:"order-app-d09a4.firebaseapp.com",
@@ -371,24 +365,33 @@ const menuRef   = fdb.ref('menu');
 const ordersRef = fdb.ref('orders');
 const restRef   = fdb.ref('restaurant');
 
-// ── STATE ──
+// ── APP STATE ──
 let currentUser = null, cart = {};
 let cUsers={}, cMenu={}, cOrders={}, cRest={};
 
-// ── UTILS ──
+// ── UI HELPERS ──
 const $ = id => document.getElementById(id);
-function showPage(id){document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));$(id).classList.add('active');}
+
+function showPage(id) {
+  // إخفاء شاشة التحميل إذا كانت ظاهرة
+  $('pageLoading').style.display = 'none';
+  
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const target = $(id);
+  if (target) target.classList.add('active');
+}
+
 function toast(msg,type=''){const t=$('toast');t.textContent=msg;t.className='toast show '+type;setTimeout(()=>t.classList.remove('show'),2800);}
 function fmtDate(ts){return new Date(ts).toLocaleDateString('ar-EG',{weekday:'long',year:'numeric',month:'long',day:'numeric'});}
 function fmtTime(ts){return new Date(ts).toLocaleTimeString('ar-EG',{hour:'2-digit',minute:'2-digit'});}
 function todayStr(){return new Date().toDateString();}
 function uid(){return Date.now().toString(36)+Math.random().toString(36).substr(2,5);}
 
-// ── SEED ──
+// ── DATABASE SEED ──
 async function seedIfEmpty(){
-  const s=await usersRef.once('value');
-  if(s.exists())return;
-  const aid=uid();
+  const s = await usersRef.once('value');
+  if(s.exists()) return;
+  const aid = uid();
   await usersRef.child(aid).set({id:aid,name:'المسؤول الرئيسي',username:'admin',password:'admin123',role:'admin'});
   const menu=[
     {name:'طعمية',emoji:'🧆',price:5,desc:'طعمية مصرية أصيلة'},
@@ -402,51 +405,83 @@ async function seedIfEmpty(){
     {name:'طماطم وخيار',emoji:'🥗',price:5,desc:'سلطة طازجة'},
     {name:'مربى',emoji:'🫙',price:5,desc:'مربى فراولة أو برتقال'},
   ];
-  for(const m of menu){const id=uid();await menuRef.child(id).set({...m,id});}
+  for(const m of menu){const id=uid(); await menuRef.child(id).set({...m,id});}
 }
 
-// ── INIT ──
+// ── INITIALIZATION ──
 async function init(){
-  try{
+  try {
+    // محاولة جلب البيانات الأساسية أولاً للتأكد من الاتصال
     await seedIfEmpty();
-    usersRef.on('value',s=>{cUsers=s.val()||{};if(currentUser?.role==='admin'){renderUsersAdmin();renderAdminsAdmin();}});
-    menuRef.on('value',s=>{cMenu=s.val()||{};if(currentUser){currentUser.role==='user'?renderMenuUser():renderMenuAdmin();}});
-    ordersRef.on('value',s=>{cOrders=s.val()||{};if(currentUser?.role==='admin')renderAdminToday();if(currentUser?.role==='user')renderUserHistory();});
-    restRef.on('value',s=>{cRest=s.val()||{};loadRestaurantView();});
+    
+    // مراقبة البيانات بشكل حي
+    usersRef.on('value', s => {
+      cUsers = s.val() || {};
+      if(currentUser?.role === 'admin') { renderUsersAdmin(); renderAdminsAdmin(); }
+    });
+    
+    menuRef.on('value', s => {
+      cMenu = s.val() || {};
+      if(currentUser) { currentUser.role === 'user' ? renderMenuUser() : renderMenuAdmin(); }
+    });
+    
+    ordersRef.on('value', s => {
+      cOrders = s.val() || {};
+      if(currentUser?.role === 'admin') renderAdminToday();
+      if(currentUser?.role === 'user') renderUserHistory();
+    });
+    
+    restRef.on('value', s => {
+      cRest = s.val() || {};
+      loadRestaurantView();
+    });
+
+    // بمجرد الوصول لهذه النقطة، يكون الاتصال قد نجح، فنظهر صفحة الدخول
     showPage('pageLogin');
-  }catch(e){toast('❌ خطأ في الاتصال بـ Firebase','error');showPage('pageLogin');}
+  } catch(e) {
+    console.error(e);
+    toast('❌ خطأ في الاتصال بـ Firebase', 'error');
+    // إخفاء التحميل حتى في حالة الخطأ لإظهار رسالة الخطأ
+    $('pageLoading').style.display = 'none';
+    showPage('pageLogin');
+  }
 }
 
-// ── AUTH ──
+// ── AUTHENTICATION ──
 async function doLogin(){
   const un=$('loginUsername').value.trim(), pw=$('loginPassword').value, err=$('loginError'), btn=$('loginBtn');
   if(!un||!pw){err.style.display='block';err.textContent='⚠️ يرجى تعبئة جميع الحقول';return;}
-  btn.disabled=true;btn.textContent='جاري التحقق...';
-  const user=Object.values(cUsers).find(u=>u.username===un&&u.password===pw);
-  btn.disabled=false;btn.textContent='دخول';
+  btn.disabled=true; btn.textContent='جاري التحقق...';
+  
+  const user = Object.values(cUsers).find(u => u.username === un && u.password === pw);
+  btn.disabled=false; btn.textContent='دخول';
+  
   if(!user){err.style.display='block';err.textContent='❌ اسم المستخدم أو كلمة المرور غير صحيحة';return;}
+  
   err.style.display='none';
   currentUser=user;
-  $('navUser').style.display='flex';$('navUsername').textContent=user.name;
+  $('navUser').style.display='flex'; $('navUsername').textContent=user.name;
+  
   if(user.role==='admin'){
     showPage('pageAdmin');
     $('todayDateLabel').textContent=fmtDate(Date.now());
-    renderAdminToday();renderMenuAdmin();renderUsersAdmin();renderAdminsAdmin();loadRestaurantForm();
-  }else{
-    showPage('pageUser');$('welcomeName').textContent='أهلاً، '+user.name+'! 👋';
-    cart={};renderMenuUser();renderUserHistory();
+    renderAdminToday(); renderMenuAdmin(); renderUsersAdmin(); renderAdminsAdmin(); loadRestaurantForm();
+  } else {
+    showPage('pageUser'); $('welcomeName').textContent='أهلاً، '+user.name+'! 👋';
+    cart={}; renderMenuUser(); renderUserHistory();
   }
 }
 
 async function doRegister(){
-  const name=$('regName').value.trim(),un=$('regUsername').value.trim(),pw=$('regPassword').value;
-  const err=$('regError'),btn=$('regBtn');
+  const name=$('regName').value.trim(), un=$('regUsername').value.trim(), pw=$('regPassword').value;
+  const err=$('regError'), btn=$('regBtn');
   if(!name||!un||!pw){err.style.display='block';err.textContent='⚠️ يرجى تعبئة جميع الحقول';return;}
   if(Object.values(cUsers).find(u=>u.username===un)){err.style.display='block';err.textContent='❌ اسم المستخدم موجود بالفعل';return;}
-  btn.disabled=true;btn.textContent='جاري الإنشاء...';
+  
+  btn.disabled=true; btn.textContent='جاري الإنشاء...';
   const id=uid();
-  await usersRef.child(id).set({id,name,username:un,password:pw,role:'user'});
-  btn.disabled=false;btn.textContent='إنشاء الحساب';
+  await usersRef.child(id).set({id, name, username:un, password:pw, role:'user'});
+  btn.disabled=false; btn.textContent='إنشاء الحساب';
   err.style.display='none';
   ['regName','regUsername','regPassword'].forEach(f=>$(f).value='');
   toast('✅ تم إنشاء الحساب! يمكنك تسجيل الدخول','success');
@@ -454,12 +489,12 @@ async function doRegister(){
 }
 
 function logout(){
-  currentUser=null;cart={};$('navUser').style.display='none';
+  currentUser=null; cart={}; $('navUser').style.display='none';
   $('loginUsername').value=$('loginPassword').value='';
   showPage('pageLogin');
 }
 
-// ── USER: MENU ──
+// ── USER OPERATIONS ──
 function renderMenuUser(){
   const grid=$('menuGrid');
   const items=Object.values(cMenu);
@@ -496,12 +531,13 @@ async function submitOrder(){
   const ents=Object.entries(cart),notes=$('orderNotes').value.trim();
   if(!ents.length&&!notes){toast('⚠️ اختر سندوتشاً أو أضف ملاحظة','error');return;}
   if(Object.values(cOrders).find(o=>o.userId===currentUser.id&&o.date===todayStr())){toast('⚠️ لقد سجّلت طلبك لهذا اليوم بالفعل','error');return;}
-  const btn=$('submitOrderBtn');btn.disabled=true;btn.textContent='جاري الحفظ...';
+  
+  const btn=$('submitOrderBtn'); btn.disabled=true; btn.textContent='جاري الحفظ...';
   let sub=0;
   const items=ents.map(([id,qty])=>{const it=cMenu[id];sub+=it.price*qty;return{id,name:it.name,emoji:it.emoji,price:it.price,qty};});
   const oid=uid();
   await ordersRef.child(oid).set({id:oid,userId:currentUser.id,userName:currentUser.name,items,notes,subtotal:sub,serviceFee:2,total:sub+2,date:todayStr(),timestamp:Date.now()});
-  btn.disabled=false;btn.textContent='✅ تأكيد الطلب';
+  btn.disabled=false; btn.textContent='✅ تأكيد الطلب';
   cart={};$('orderNotes').value='';renderMenuUser();
   toast('✅ تم تسجيل طلبك بنجاح!','success');
 }
@@ -530,7 +566,7 @@ function switchUserTab(id,btn){
   if(id==='tabHistory')renderUserHistory();
 }
 
-// ── ADMIN ──
+// ── ADMIN OPERATIONS ──
 function switchAdmin(sid,link){
   document.querySelectorAll('.admin-section').forEach(s=>s.classList.remove('active'));$(sid).classList.add('active');
   document.querySelectorAll('.sidebar-link').forEach(l=>l.classList.remove('active'));link.classList.add('active');
@@ -581,7 +617,7 @@ async function addSandwich(){
   ['nSName','nSPrice','nSEmoji','nSDesc'].forEach(f=>$(f).value='');
   toast('✅ تمت إضافة السندوتش','success');
 }
-async function delSandwich(id){if(!confirm('هل تريد حذف هذا السندوتش؟'))return;await menuRef.child(id).remove();toast('🗑 تم الحذف','');}
+async function delSandwich(id){if(!confirm('هل تريد حذف هذا السندوتش؟'))return; await menuRef.child(id).remove(); toast('🗑 تم الحذف','');}
 
 function renderUsersAdmin(){
   const u=Object.values(cUsers).filter(u=>u.role==='user');
@@ -600,7 +636,7 @@ async function addUser(){
 async function delUser(id){
   if(id===currentUser.id){toast('❌ لا يمكنك حذف حسابك الحالي','error');return;}
   if(!confirm('هل تريد حذف هذا المستخدم؟'))return;
-  await usersRef.child(id).remove();toast('🗑 تم الحذف','');
+  await usersRef.child(id).remove(); toast('🗑 تم الحذف','');
 }
 
 function renderAdminsAdmin(){
@@ -618,21 +654,22 @@ async function addAdmin(){
 
 function loadRestaurantForm(){
   const r=cRest;
-  $('restName').value=r.name||'';$('restPhone').value=r.phone||'';
-  $('restAddress').value=r.address||'';$('restHours').value=r.hours||'';$('restNotes').value=r.notes||'';
+  $('restName').value=r.name||''; $('restPhone').value=r.phone||'';
+  $('restAddress').value=r.address||''; $('restHours').value=r.hours||''; $('restNotes').value=r.notes||'';
 }
 function loadRestaurantView(){
   const r=cRest;
-  $('ri_name').textContent=r.name||'—';$('ri_phone').textContent=r.phone||'—';
-  $('ri_address').textContent=r.address||'—';$('ri_hours').textContent=r.hours||'—';$('ri_notes').textContent=r.notes||'—';
+  $('ri_name').textContent=r.name||'—'; $('ri_phone').textContent=r.phone||'—';
+  $('ri_address').textContent=r.address||'—'; $('ri_hours').textContent=r.hours||'—'; $('ri_notes').textContent=r.notes||'—';
 }
 async function saveRestaurant(){
   await restRef.set({name:$('restName').value.trim(),phone:$('restPhone').value.trim(),address:$('restAddress').value.trim(),hours:$('restHours').value.trim(),notes:$('restNotes').value.trim()});
   toast('✅ تم حفظ معلومات المطعم','success');
 }
 
-// ── START ──
+// ── APP STARTUP ──
 $('todayDateLabel').textContent=fmtDate(Date.now());
+// بدء التشغيل
 init();
 </script>
 </body>
