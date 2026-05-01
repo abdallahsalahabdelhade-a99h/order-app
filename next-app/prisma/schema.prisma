@@ -1,0 +1,53 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id                  String      @id @default(cuid())
+  name                String
+  username            String      @unique
+  password            String
+  role                String      @default("CUSTOMER") // SUPER_ADMIN, RESTAURANT_ADMIN, CUSTOMER
+  
+  // For RESTAURANT_ADMIN
+  managedRestaurantId String?
+  managedRestaurant   Restaurant? @relation(fields: [managedRestaurantId], references: [id])
+}
+
+model Restaurant {
+  id              String         @id @default(cuid())
+  name            String
+  logoUrl         String?
+  deliveryNumber  String
+  menuImageUrl    String?
+  
+  categories      MenuCategory[]
+  admins          User[]         // Admins managing this restaurant
+}
+
+model MenuCategory {
+  id           String     @id @default(cuid())
+  title        String     // e.g., "سندوتشات", "وجبات"
+  
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  
+  items        MenuItem[]
+}
+
+model MenuItem {
+  id          String       @id @default(cuid())
+  name        String       // e.g., "فول إسكندراني"
+  price       Float
+  imageUrl    String?
+  
+  categoryId  String
+  category    MenuCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+}
